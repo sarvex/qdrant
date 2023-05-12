@@ -70,8 +70,8 @@ def test_triple_replication(tmp_path: pathlib.Path):
         if all_active:
             if len(points_counts) != 1:
                 with open("test_triple_replication.log", "w") as f:
+                    collection_name = "test_collection"
                     for peer_api_uri in peer_api_uris:
-                        collection_name = "test_collection"
                         res = requests.get(f"{peer_api_uri}/collections/{collection_name}/cluster", timeout=10)
                         f.write(f"{peer_api_uri} {res.json()['result']}\n")
                     for peer_api_uri in peer_api_uris:

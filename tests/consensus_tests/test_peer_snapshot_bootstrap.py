@@ -14,9 +14,6 @@ def test_peer_snapshot_bootstrap(tmp_path: pathlib.Path):
 
     peer_dirs = make_peer_folders(tmp_path, N_PEERS)
 
-    # Gathers REST API uris
-    peer_api_uris = []
-
     # Get stable port for first peer
     #
     # NOTE:
@@ -31,15 +28,15 @@ def test_peer_snapshot_bootstrap(tmp_path: pathlib.Path):
     (bootstrap_api_uri, bootstrap_uri) = start_first_peer(
         peer_dirs[0], "peer_0_0.log", port = first_peer_port)
 
-    peer_api_uris.append(bootstrap_api_uri)
-
+    peer_api_uris = [bootstrap_api_uri]
     # Wait for leader
     leader = wait_peer_added(bootstrap_api_uri)
 
     # Start other peers
-    for i in range(1, len(peer_dirs) - 1):
-        peer_api_uris.append(start_peer(peer_dirs[i], f"peer_0_{i}.log", bootstrap_uri))
-
+    peer_api_uris.extend(
+        start_peer(peer_dirs[i], f"peer_0_{i}.log", bootstrap_uri)
+        for i in range(1, len(peer_dirs) - 1)
+    )
     # Wait for cluster
     wait_for_uniform_cluster_status(peer_api_uris, leader)
 
@@ -114,7 +111,7 @@ def leader_is_reelected(count):
 
         leader = r.json()["result"]["raft_info"]["leader"]
 
-        if leader != previous_leader and not leader is None:
+        if leader != previous_leader and leader is not None:
             nonlocal current_leader
             nonlocal current_leader_count
 

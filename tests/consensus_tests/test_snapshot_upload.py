@@ -111,9 +111,10 @@ def recover_from_uploaded_snapshot(tmp_path: pathlib.Path, n_replicas):
         if not res.ok:
             time.sleep(1)  # Wait to node is up
             continue
-        collections = set(
-            collection["name"] for collection in res.json()["result"]["collections"]
-        )
+        collections = {
+            collection["name"]
+            for collection in res.json()["result"]["collections"]
+        }
         if COLLECTION_NAME not in collections:
             time.sleep(1)  # Wait to sync with consensus
             continue

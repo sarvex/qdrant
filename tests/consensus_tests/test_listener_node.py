@@ -17,12 +17,8 @@ def get_states(peer_api_uri: str, collection_name: str):
     res = requests.get(f"{peer_api_uri}/collections/{collection_name}/cluster", timeout=10)
     assert_http_ok(res)
     cluster = res.json()["result"]
-    all_shard_states = []
-    for shard in cluster['local_shards']:
-        all_shard_states.append(shard['state'])
-    for shard in cluster['remote_shards']:
-        all_shard_states.append(shard['state'])
-
+    all_shard_states = [shard['state'] for shard in cluster['local_shards']]
+    all_shard_states.extend(shard['state'] for shard in cluster['remote_shards'])
     return all_shard_states
 
 

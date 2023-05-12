@@ -54,8 +54,7 @@ def assert_project_root():
 
 def get_qdrant_exec() -> str:
     directory_path = os.getcwd()
-    qdrant_exec = directory_path + "/target/debug/qdrant"
-    return qdrant_exec
+    return f"{directory_path}/target/debug/qdrant"
 
 
 def get_pytest_current_test_name() -> str:
@@ -114,13 +113,9 @@ def start_cluster(tmp_path, num_peers, port_seed=None):
     assert_project_root()
     peer_dirs = make_peer_folders(tmp_path, num_peers)
 
-    # Gathers REST API uris
-    peer_api_uris = []
-
     # Start bootstrap
     (bootstrap_api_uri, bootstrap_uri) = start_first_peer(peer_dirs[0], "peer_0_0.log", port=port_seed)
-    peer_api_uris.append(bootstrap_api_uri)
-
+    peer_api_uris = [bootstrap_api_uri]
     # Wait for leader
     leader = wait_peer_added(bootstrap_api_uri)
 
@@ -155,8 +150,7 @@ def make_peer_folders(base_path: Path, n_peers: int) -> List[Path]:
 def get_cluster_info(peer_api_uri: str) -> dict:
     r = requests.get(f"{peer_api_uri}/cluster")
     assert_http_ok(r)
-    res = r.json()["result"]
-    return res
+    return r.json()["result"]
 
 
 def print_clusters_info(peer_api_uris: [str]):
@@ -186,15 +180,13 @@ def fetch_highest_peer_id(peer_api_uris: [str]) -> str:
 def get_collection_cluster_info(peer_api_uri: str, collection_name: str) -> dict:
     r = requests.get(f"{peer_api_uri}/collections/{collection_name}/cluster")
     assert_http_ok(r)
-    res = r.json()["result"]
-    return res
+    return r.json()["result"]
 
 
 def get_collection_info(peer_api_uri: str, collection_name: str) -> dict:
     r = requests.get(f"{peer_api_uri}/collections/{collection_name}")
     assert_http_ok(r)
-    res = r.json()["result"]
-    return res
+    return r.json()["result"]
 
 
 def print_collection_cluster_info(peer_api_uri: str, collection_name: str):
@@ -251,12 +243,11 @@ def check_cluster_size(peer_api_uri: str, expected_size: int) -> bool:
 
 def all_nodes_cluster_info_consistent(peer_api_uris: [str], expected_leader: str) -> bool:
     expected_size = len(peer_api_uris)
-    for uri in peer_api_uris:
-        if check_leader(uri, expected_leader) and check_cluster_size(uri, expected_size):
-            continue
-        else:
-            return False
-    return True
+    return not any(
+        not check_leader(uri, expected_leader)
+        or not check_cluster_size(uri, expected_size)
+        for uri in peer_api_uris
+    )
 
 
 def all_nodes_respond(peer_api_uris: [str]) -> bool:
@@ -276,7 +267,7 @@ def collection_exists_on_all_peers(collection_name: str, peer_api_uris: [str]) -
         assert_http_ok(r)
         collections = r.json()["result"]["collections"]
         filtered_collections = [c for c in collections if c['name'] == collection_name]
-        if len(filtered_collections) == 0:
+        if not filtered_collections:
             print(
                 f"Collection '{collection_name}' does not exist on peer {uri} found {json.dumps(collections, indent=4)}")
             return False
@@ -304,10 +295,10 @@ def check_all_replicas_active(peer_api_uri: str, collection_name: str) -> bool:
     for shard in collection_cluster_info["local_shards"]:
         if shard['state'] != 'Active':
             return False
-    for shard in collection_cluster_info["remote_shards"]:
-        if shard['state'] != 'Active':
-            return False
-    return True
+    return all(
+        shard['state'] == 'Active'
+        for shard in collection_cluster_info["remote_shards"]
+    )
 
 
 def check_some_replicas_not_active(peer_api_uri: str, collection_name: str) -> bool:
@@ -438,12 +429,11 @@ def wait_collection_on_all_peers(collection_name: str, peer_api_uris: [str], max
             exists &= any(collection["name"] == collection_name for collection in collections)
         if exists:
             break
-        else:
-            # Wait until collection is created on all peers
-            # Consensus guarantees that collection will appear on majority of peers, but not on all of them
-            # So we need to wait a bit extra time
-            time.sleep(1)
-            max_wait -= 1
+        # Wait until collection is created on all peers
+        # Consensus guarantees that collection will appear on majority of peers, but not on all of them
+        # So we need to wait a bit extra time
+        time.sleep(1)
+        max_wait -= 1
         if max_wait <= 0:
             raise Exception("Collection was not created on all peers in time")
 

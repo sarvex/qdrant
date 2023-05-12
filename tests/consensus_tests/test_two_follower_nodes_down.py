@@ -58,11 +58,15 @@ def test_two_follower_nodes_down(tmp_path: pathlib.Path):
     upload_process.kill()
 
     # Restart third peer on same ports
-    new_url_3 = start_peer(peer_dirs[2], f"peer_{3}_restarted.log", bootstrap_uri, 20200)
+    new_url_3 = start_peer(
+        peer_dirs[2], 'peer_3_restarted.log', bootstrap_uri, 20200
+    )
     peer_api_uris.append(new_url_3)
 
     # Restart second peer on same ports
-    new_url_2 = start_peer(peer_dirs[1], f"peer_{2}_restarted.log", bootstrap_uri, 20100)
+    new_url_2 = start_peer(
+        peer_dirs[1], 'peer_2_restarted.log', bootstrap_uri, 20100
+    )
     peer_api_uris.append(new_url_2)
 
     # Wait for peers to be online
@@ -86,8 +90,8 @@ def test_two_follower_nodes_down(tmp_path: pathlib.Path):
         if all_active:
             if len(points_counts) != 1:
                 with open("test_triple_replication.log", "w") as f:
+                    collection_name = "test_collection"
                     for peer_api_uri in peer_api_uris:
-                        collection_name = "test_collection"
                         res = requests.get(f"{peer_api_uri}/collections/{collection_name}/cluster", timeout=10)
                         f.write(f"{peer_api_uri} {res.json()['result']}\n")
                     for peer_api_uri in peer_api_uris:

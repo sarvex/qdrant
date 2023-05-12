@@ -34,11 +34,10 @@ while True:
         exists &= any(collection["name"] == args.collection_name for collection in collections)
     if exists:
         break
-    else:
-        # Wait until collection is created on all peers
-        # Consensus guarantees that collection will appear on majority of peers, but not on all of them
-        # So we need to wait a bit extra time
-        time.sleep(1)
-        MAX_WAIT -= 1
+    # Wait until collection is created on all peers
+    # Consensus guarantees that collection will appear on majority of peers, but not on all of them
+    # So we need to wait a bit extra time
+    time.sleep(1)
+    MAX_WAIT -= 1
     if MAX_WAIT <= 0:
         raise Exception("Collection was not created on all peers in time")

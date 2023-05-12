@@ -94,9 +94,9 @@ def test_search_with_threshold():
     assert response.json()['result'][1]['id'] == 1
     assert response.json()['result'][2]['id'] == 3
 
-    assert response.json()['result'][0]['score'] - 1.0 < 0.0001
-    assert response.json()['result'][1]['score'] - 1.414214 < 0.0001
-    assert response.json()['result'][2]['score'] - 2.828427 < 0.0001
+    assert response.json()['result'][0]['score'] < 1.0001
+    assert response.json()['result'][1]['score'] < 1.414314
+    assert response.json()['result'][2]['score'] < 2.8285270000000002
 
     response = request_with_validation(
         api='/collections/{collection_name}/points/search',
@@ -115,6 +115,6 @@ def test_search_with_threshold():
     assert response.json()['result'][0]['id'] == 2
     assert response.json()['result'][1]['id'] == 1
 
-    assert response.json()['result'][0]['score'] - 1.0 < 0.0001
-    assert response.json()['result'][1]['score'] - 1.414214 < 0.0001
+    assert response.json()['result'][0]['score'] < 1.0001
+    assert response.json()['result'][1]['score'] < 1.414314
 

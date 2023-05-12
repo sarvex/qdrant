@@ -63,11 +63,11 @@ def request_with_validation(
         if param.is_required:
             assert param.name in query_params
 
-    for param in path_params.keys():
-        assert param in set(p.name for p in operation.path_parameters.items)
+    for param in path_params:
+        assert param in {p.name for p in operation.path_parameters.items}
 
-    for param in query_params.keys():
-        assert param in set(p.name for p in operation.query.items)
+    for param in query_params:
+        assert param in {p.name for p in operation.query.items}
 
     if not action:
         raise RuntimeError(f"Method {method} does not exists")
