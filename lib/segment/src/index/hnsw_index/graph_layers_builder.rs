@@ -4,14 +4,6 @@ use std::collections::BinaryHeap;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 
-use bitvec::prelude::BitVec;
-use common::fixed_length_priority_queue::FixedLengthPriorityQueue;
-use common::types::{PointOffsetType, ScoreType, ScoredPointOffset};
-use io::file_operations::atomic_save_bin;
-use parking_lot::{Mutex, MutexGuard, RwLock};
-use rand::Rng;
-use rand::distr::Uniform;
-
 use super::graph_layers::GraphLayerData;
 use super::graph_links::{GraphLinks, GraphLinksFormat};
 use crate::common::operation_error::OperationResult;
@@ -21,6 +13,13 @@ use crate::index::hnsw_index::graph_links::GraphLinksSerializer;
 use crate::index::hnsw_index::point_scorer::FilteredScorer;
 use crate::index::hnsw_index::search_context::SearchContext;
 use crate::index::visited_pool::{VisitedListHandle, VisitedPool};
+use bitvec::prelude::BitVec;
+use common::fixed_length_priority_queue::FixedLengthPriorityQueue;
+use common::types::{PointOffsetType, ScoreType, ScoredPointOffset};
+use io::file_operations::atomic_save_bin;
+use parking_lot::{Mutex, MutexGuard, RwLock};
+use rand::Rng;
+use rand::distr::Uniform;
 
 pub type LockedLinkContainer = RwLock<LinkContainer>;
 pub type LockedLayersContainer = Vec<LockedLinkContainer>;
