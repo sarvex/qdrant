@@ -3,20 +3,20 @@ use std::collections::HashMap;
 use common::counter::hardware_counter::HardwareCounterCell;
 use common::types::PointOffsetType;
 
-use super::inverted_index::InvertedIndex;
+use super::compressed_posting::compressed_posting_list::CompressedPostingList;
+use super::inverted_index::{Document, InvertedIndex, ParsedQuery, TokenId};
+use super::mutable_inverted_index::MutableInvertedIndex;
+use super::postings_iterator::intersect_compressed_postings_iterator;
 use crate::common::operation_error::{OperationError, OperationResult};
-use crate::index::field_index::full_text_index::compressed_posting::compressed_posting_list::CompressedPostingList;
-use crate::index::field_index::full_text_index::inverted_index::{ParsedQuery, TokenId};
-use crate::index::field_index::full_text_index::mutable_inverted_index::MutableInvertedIndex;
-use crate::index::field_index::full_text_index::postings_iterator::intersect_compressed_postings_iterator;
 
 #[cfg_attr(test, derive(Clone))]
 #[derive(Default, Debug)]
 pub struct ImmutableInvertedIndex {
-    pub(in crate::index::field_index::full_text_index) postings: Vec<CompressedPostingList>,
-    pub(in crate::index::field_index::full_text_index) vocab: HashMap<String, TokenId>,
-    pub(in crate::index::field_index::full_text_index) point_to_tokens_count: Vec<Option<usize>>,
-    pub(in crate::index::field_index::full_text_index) points_count: usize,
+    pub(super) postings: Vec<CompressedPostingList>,
+    pub(super) vocab: HashMap<String, TokenId>,
+    pub(super) point_to_tokens_count: Vec<Option<usize>>,
+    pub(super) point_to_doc: Option<Vec<Option<Document>>>,
+    pub(super) points_count: usize,
 }
 
 impl InvertedIndex for ImmutableInvertedIndex {
@@ -178,14 +178,17 @@ impl From<MutableInvertedIndex> for ImmutableInvertedIndex {
             .collect();
         vocab.shrink_to_fit();
 
+        let point_to_tokens_count = index
+            .point_to_tokens
+            .iter()
+            .map(|doc| doc.as_ref().map(|doc| doc.len()))
+            .collect();
+
         ImmutableInvertedIndex {
             postings,
             vocab,
-            point_to_tokens_count: index
-                .point_to_tokens
-                .iter()
-                .map(|doc| doc.as_ref().map(|doc| doc.len()))
-                .collect(),
+            point_to_tokens_count,
+            point_to_doc: index.point_to_doc,
             points_count: index.points_count,
         }
     }

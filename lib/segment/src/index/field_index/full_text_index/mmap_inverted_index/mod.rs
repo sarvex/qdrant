@@ -5,6 +5,7 @@ use bitvec::vec::BitVec;
 use common::counter::hardware_counter::HardwareCounterCell;
 use common::mmap_hashmap::{MmapHashMap, READ_ENTRY_OVERHEAD};
 use common::types::PointOffsetType;
+use itertools::Either;
 use memory::fadvise::clear_disk_cache;
 use memory::madvise::AdviceSetting;
 use memory::mmap_ops;
@@ -23,17 +24,18 @@ mod mmap_postings;
 const POSTINGS_FILE: &str = "postings.dat";
 const VOCAB_FILE: &str = "vocab.dat";
 const POINT_TO_TOKENS_COUNT_FILE: &str = "point_to_tokens_count.dat";
+const POINT_TO_DOC_FILE: &str = "point_to_doc.dat";
 const DELETED_POINTS_FILE: &str = "deleted_points.dat";
 
 pub struct MmapInvertedIndex {
-    pub(in crate::index::field_index::full_text_index) path: PathBuf,
-    pub(in crate::index::field_index::full_text_index) postings: MmapPostings,
-    pub(in crate::index::field_index::full_text_index) vocab: MmapHashMap<str, TokenId>,
-    pub(in crate::index::field_index::full_text_index) point_to_tokens_count: MmapSlice<usize>,
-    pub(in crate::index::field_index::full_text_index) deleted_points:
-        MmapBitSliceBufferedUpdateWrapper,
+    pub(super) path: PathBuf,
+    pub(super) postings: MmapPostings,
+    pub(super) vocab: MmapHashMap<str, TokenId>,
+    pub(super) point_to_tokens_count: MmapSlice<usize>,
+    pub(super) point_to_doc: Option<MmapHashMap<PointOffsetType, TokenId>>,
+    pub(super) deleted_points: MmapBitSliceBufferedUpdateWrapper,
     /// Number of points which are not deleted
-    pub(in crate::index::field_index::full_text_index) active_points_count: usize,
+    pub(super) active_points_count: usize,
     is_on_disk: bool,
 }
 
@@ -43,6 +45,7 @@ impl MmapInvertedIndex {
             postings,
             vocab,
             point_to_tokens_count,
+            point_to_doc,
             points_count: _,
         } = inverted_index;
 
@@ -51,6 +54,7 @@ impl MmapInvertedIndex {
         let postings_path = path.join(POSTINGS_FILE);
         let vocab_path = path.join(VOCAB_FILE);
         let point_to_tokens_count_path = path.join(POINT_TO_TOKENS_COUNT_FILE);
+        let point_to_doc_path = path.join(POINT_TO_DOC_FILE);
         let deleted_points_path = path.join(DELETED_POINTS_FILE);
 
         MmapPostings::create(postings_path, &postings)?;
@@ -61,6 +65,23 @@ impl MmapInvertedIndex {
             &vocab_path,
             vocab.iter().map(|(k, v)| (k.as_str(), std::iter::once(*v))),
         )?;
+
+        if let Some(point_to_doc) = point_to_doc {
+            // Collect keys first so we can pass references to them
+            let keys: Vec<PointOffsetType> = (0u32..point_to_doc.len() as u32).collect();
+
+            MmapHashMap::<PointOffsetType, TokenId>::create(
+                &point_to_doc_path,
+                keys.iter().zip(point_to_doc).map(|(key, doc_opt)| {
+                    let tokens_iter = match doc_opt {
+                        Some(document) => Either::Left(document.into_iter()),
+                        None => Either::Right(std::iter::empty()),
+                    };
+
+                    (key, tokens_iter)
+                }),
+            )?;
+        }
 
         // Save point_to_tokens_count, separated into a bitslice for None values and a slice for actual values
         //
@@ -85,6 +106,7 @@ impl MmapInvertedIndex {
         let postings_path = path.join(POSTINGS_FILE);
         let vocab_path = path.join(VOCAB_FILE);
         let point_to_tokens_count_path = path.join(POINT_TO_TOKENS_COUNT_FILE);
+        let point_to_doc_path = path.join(POINT_TO_DOC_FILE);
         let deleted_points_path = path.join(DELETED_POINTS_FILE);
 
         let postings = MmapPostings::open(&postings_path, populate)?;
@@ -96,6 +118,16 @@ impl MmapInvertedIndex {
                 AdviceSetting::Global,
                 populate,
             )?)?
+        };
+
+        // Try to open point_to_doc if the file exists
+        let point_to_doc = if point_to_doc_path.exists() {
+            Some(MmapHashMap::<PointOffsetType, TokenId>::open(
+                &point_to_doc_path,
+                populate,
+            )?)
+        } else {
+            None
         };
 
         let deleted =
@@ -111,6 +143,7 @@ impl MmapInvertedIndex {
             postings,
             vocab,
             point_to_tokens_count,
+            point_to_doc,
             deleted_points,
             active_points_count: points_count,
             is_on_disk: !populate,
@@ -134,6 +167,7 @@ impl MmapInvertedIndex {
             self.path.join(POSTINGS_FILE),
             self.path.join(VOCAB_FILE),
             self.path.join(POINT_TO_TOKENS_COUNT_FILE),
+            self.path.join(POINT_TO_DOC_FILE),
             self.path.join(DELETED_POINTS_FILE),
         ]
     }
@@ -148,6 +182,9 @@ impl MmapInvertedIndex {
         self.postings.populate();
         self.vocab.populate()?;
         self.point_to_tokens_count.populate()?;
+        if let Some(point_to_doc) = &self.point_to_doc {
+            point_to_doc.populate()?;
+        }
         Ok(())
     }
 

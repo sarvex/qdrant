@@ -55,12 +55,21 @@ impl FromIterator<TokenId> for TokenSet {
 }
 
 /// Contains the token ids that make up a document, in the same order that appear in the document.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Document(Vec<TokenId>);
 
 impl Document {
     pub fn new(tokens: Vec<TokenId>) -> Self {
         Self(tokens)
+    }
+}
+
+impl IntoIterator for Document {
+    type Item = TokenId;
+    type IntoIter = std::vec::IntoIter<TokenId>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
     }
 }
 
