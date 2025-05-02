@@ -1,7 +1,9 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 
+use ahash::AHashSet;
 use common::counter::hardware_counter::HardwareCounterCell;
 use common::types::PointOffsetType;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
 use crate::common::operation_error::OperationResult;
@@ -14,30 +16,51 @@ pub type TokenId = u32;
 ///
 /// Internally, it keeps them unique and sorted, so that we can binary-search over them
 #[derive(Default, Serialize, Deserialize, Debug, Clone)]
-pub struct TokenSet {
-    tokens: Vec<TokenId>,
-}
+pub struct TokenSet(Vec<TokenId>);
 
 impl TokenSet {
-    pub fn new(mut tokens: Vec<TokenId>) -> Self {
-        tokens.sort_unstable();
-        Self { tokens }
+    pub fn new(tokens: AHashSet<TokenId>) -> Self {
+        let sorted_unique = tokens.into_iter().sorted_unstable().collect();
+
+        Self(sorted_unique)
     }
 
     pub fn len(&self) -> usize {
-        self.tokens.len()
+        self.0.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.tokens.is_empty()
+        self.0.is_empty()
     }
 
     pub fn tokens(&self) -> &[TokenId] {
-        &self.tokens
+        &self.0
     }
 
     pub fn contains(&self, token: &TokenId) -> bool {
-        self.tokens.binary_search(token).is_ok()
+        self.0.binary_search(token).is_ok()
+    }
+}
+
+impl FromIterator<TokenId> for TokenSet {
+    fn from_iter<T: IntoIterator<Item = TokenId>>(iter: T) -> Self {
+        let tokens = iter
+            .into_iter()
+            .sorted_unstable()
+            .dedup()
+            .collect::<Vec<_>>();
+
+        Self(tokens)
+    }
+}
+
+/// Contains the token ids that make up a document, in the same order that appear in the document.
+#[derive(Clone)]
+pub struct Document(Vec<TokenId>);
+
+impl Document {
+    pub fn new(tokens: Vec<TokenId>) -> Self {
+        Self(tokens)
     }
 }
 
@@ -62,7 +85,14 @@ impl ParsedQuery {
 pub trait InvertedIndex {
     fn get_vocab_mut(&mut self) -> &mut HashMap<String, TokenId>;
 
-    fn token_ids(&mut self, str_tokens: &BTreeSet<String>) -> TokenSet {
+    /// Translate the string tokens into token ids.
+    /// If it is an unseen token, it is added to the vocabulary and a new token id is generated.
+    ///
+    /// The order of the tokens is preserved.
+    fn token_ids<'a>(
+        &mut self,
+        str_tokens: impl IntoIterator<Item = &'a String> + 'a,
+    ) -> Vec<TokenId> {
         let vocab = self.get_vocab_mut();
         let mut token_ids = vec![];
         for token in str_tokens {
@@ -78,13 +108,20 @@ pub trait InvertedIndex {
             token_ids.push(vocab_idx);
         }
 
-        TokenSet::new(token_ids)
+        token_ids
     }
 
     fn index_tokens(
         &mut self,
         idx: PointOffsetType,
         tokens: TokenSet,
+        hw_counter: &HardwareCounterCell,
+    ) -> OperationResult<()>;
+
+    fn index_document(
+        &mut self,
+        idx: PointOffsetType,
+        document: Document,
         hw_counter: &HardwareCounterCell,
     ) -> OperationResult<()>;
 
@@ -205,7 +242,7 @@ mod tests {
     use rand::seq::SliceRandom;
     use rstest::rstest;
 
-    use super::{InvertedIndex, ParsedQuery, TokenId};
+    use super::{InvertedIndex, ParsedQuery, TokenId, TokenSet};
     use crate::index::field_index::full_text_index::immutable_inverted_index::ImmutableInvertedIndex;
     use crate::index::field_index::full_text_index::mmap_inverted_index::MmapInvertedIndex;
     use crate::index::field_index::full_text_index::mutable_inverted_index::MutableInvertedIndex;
@@ -249,7 +286,8 @@ mod tests {
             let doc_len = rand::rng().random_range(10..=30);
             let tokens: BTreeSet<String> = (0..doc_len).map(|_| generate_word()).collect();
             let token_ids = index.token_ids(&tokens);
-            index.index_tokens(idx, token_ids, &hw_counter).unwrap();
+            let token_set = TokenSet::from_iter(token_ids);
+            index.index_tokens(idx, token_set, &hw_counter).unwrap();
         }
 
         // Remove some points

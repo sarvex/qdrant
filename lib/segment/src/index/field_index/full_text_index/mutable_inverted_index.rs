@@ -3,21 +3,23 @@ use std::collections::{BTreeSet, HashMap};
 use common::counter::hardware_counter::HardwareCounterCell;
 use common::types::PointOffsetType;
 
-use super::inverted_index::InvertedIndex;
+use super::inverted_index::{Document, InvertedIndex, ParsedQuery, TokenId, TokenSet};
+use super::posting_list::PostingList;
+use super::postings_iterator::intersect_postings_iterator;
 use crate::common::operation_error::OperationResult;
-use crate::index::field_index::full_text_index::inverted_index::{
-    TokenSet, ParsedQuery, TokenId,
-};
-use crate::index::field_index::full_text_index::posting_list::PostingList;
-use crate::index::field_index::full_text_index::postings_iterator::intersect_postings_iterator;
 
 #[cfg_attr(test, derive(Clone))]
 #[derive(Default)]
 pub struct MutableInvertedIndex {
-    pub(in crate::index::field_index::full_text_index) postings: Vec<PostingList>,
-    pub(in crate::index::field_index::full_text_index) vocab: HashMap<String, TokenId>,
-    pub(in crate::index::field_index::full_text_index) point_to_tokens: Vec<Option<TokenSet>>,
-    pub(in crate::index::field_index::full_text_index) points_count: usize,
+    pub(super) postings: Vec<PostingList>,
+    pub(super) vocab: HashMap<String, TokenId>,
+    pub(super) point_to_tokens: Vec<Option<TokenSet>>,
+
+    /// Optional additional structure to store positional information of tokens in the documents.
+    ///
+    /// Must be enabled explicitly.
+    pub(super) point_to_doc: Option<Vec<Option<Document>>>,
+    pub(super) points_count: usize,
 }
 
 impl MutableInvertedIndex {
@@ -38,7 +40,8 @@ impl MutableInvertedIndex {
             }
 
             let tokens = index.token_ids(&str_tokens);
-            index.point_to_tokens[idx as usize] = Some(tokens);
+            let tokens_set = TokenSet::from_iter(tokens);
+            index.point_to_tokens[idx as usize] = Some(tokens_set);
         }
 
         // build postings from point_to_docs
@@ -88,21 +91,11 @@ impl InvertedIndex for MutableInvertedIndex {
         if self.point_to_tokens.len() <= point_id as usize {
             let new_len = point_id as usize + 1;
 
-            // Only measure the overhead of `Document` here since we account for the tokens a few lines below.
-            hw_cell_wb.incr_delta(
-                (new_len - self.point_to_tokens.len()) * size_of::<Option<TokenSet>>(),
-            );
+            // Only measure the overhead of `TokenSet` here since we account for the tokens a few lines below.
+            hw_cell_wb
+                .incr_delta((new_len - self.point_to_tokens.len()) * size_of::<Option<TokenSet>>());
 
             self.point_to_tokens.resize_with(new_len, Default::default);
-
-            // Resize the ordered documents vector as well
-            if self.point_to_ordered_docs.len() <= point_id as usize {
-                hw_cell_wb.incr_delta(
-                    (new_len - self.point_to_ordered_docs.len()) * size_of::<Option<OrderedDocument>>(),
-                );
-
-                self.point_to_ordered_docs.resize_with(new_len, Default::default);
-            }
         }
 
         for token_id in tokens.tokens() {
@@ -126,29 +119,32 @@ impl InvertedIndex for MutableInvertedIndex {
         Ok(())
     }
 
-    fn index_ordered_document(
+    fn index_document(
         &mut self,
         point_id: PointOffsetType,
-        ordered_document: OrderedDocument,
+        ordered_document: Document,
         hw_counter: &HardwareCounterCell,
     ) -> OperationResult<()> {
+        let Some(point_to_doc) = &mut self.point_to_doc else {
+            // Phrase matching is not enabled
+            return Ok(());
+        };
+
         let mut hw_cell_wb = hw_counter
             .payload_index_io_write_counter()
             .write_back_counter();
 
-        // Ensure the point_to_ordered_docs has enough capacity
-        if self.point_to_ordered_docs.len() <= point_id as usize {
+        // Ensure container has enough capacity
+        if point_to_doc.len() <= point_id as usize {
             let new_len = point_id as usize + 1;
 
-            hw_cell_wb.incr_delta(
-                (new_len - self.point_to_ordered_docs.len()) * size_of::<Option<OrderedDocument>>(),
-            );
+            hw_cell_wb.incr_delta((new_len - point_to_doc.len()) * size_of::<Option<Document>>());
 
-            self.point_to_ordered_docs.resize_with(new_len, Default::default);
+            point_to_doc.resize_with(new_len, Default::default);
         }
 
         // Store the ordered document
-        self.point_to_ordered_docs[point_id as usize] = Some(ordered_document);
+        point_to_doc[point_id as usize] = Some(ordered_document);
 
         Ok(())
     }
@@ -224,7 +220,7 @@ impl InvertedIndex for MutableInvertedIndex {
     }
 
     fn values_is_empty(&self, point_id: PointOffsetType) -> bool {
-        self.get_tokens(point_id).map(|x| x.is_empty()).unwrap_or(true)
+        self.get_tokens(point_id).map_or(true, |x| x.is_empty())
     }
 
     fn values_count(&self, point_id: PointOffsetType) -> usize {
