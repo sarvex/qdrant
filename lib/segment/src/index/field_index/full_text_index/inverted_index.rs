@@ -134,7 +134,7 @@ pub trait InvertedIndex {
         hw_counter: &HardwareCounterCell,
     ) -> OperationResult<()>;
 
-    fn remove_document(&mut self, idx: PointOffsetType) -> bool;
+    fn remove(&mut self, idx: PointOffsetType) -> bool;
 
     fn filter<'a>(
         &'a self,
@@ -303,7 +303,7 @@ mod tests {
         let mut points_to_delete = (0..indexed_count).collect::<Vec<_>>();
         points_to_delete.shuffle(&mut rand::rng());
         for idx in &points_to_delete[..deleted_count as usize] {
-            index.remove_document(*idx);
+            index.remove(*idx);
         }
 
         index
@@ -444,8 +444,8 @@ mod tests {
             .collect();
 
         for point_id in &points_to_delete {
-            mutable.remove_document(*point_id);
-            mmap_index.remove_document(*point_id);
+            mutable.remove(*point_id);
+            mmap_index.remove(*point_id);
         }
 
         // Check congruence after deletion

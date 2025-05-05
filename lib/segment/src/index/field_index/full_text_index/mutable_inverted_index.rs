@@ -150,22 +150,28 @@ impl InvertedIndex for MutableInvertedIndex {
         Ok(())
     }
 
-    fn remove_document(&mut self, idx: PointOffsetType) -> bool {
+    fn remove(&mut self, idx: PointOffsetType) -> bool {
         if self.point_to_tokens.len() <= idx as usize {
             return false; // Already removed or never actually existed
         }
 
-        let Some(removed_doc) = std::mem::take(&mut self.point_to_tokens[idx as usize]) else {
+        let Some(removed_token_set) = std::mem::take(&mut self.point_to_tokens[idx as usize])
+        else {
             return false;
         };
 
         self.points_count -= 1;
 
-        for removed_token in removed_doc.tokens() {
+        for removed_token in removed_token_set.tokens() {
             // unwrap safety: posting list exists and contains the point idx
             let posting = self.postings.get_mut(*removed_token as usize).unwrap();
             posting.remove(idx);
         }
+
+        if let Some(point_to_doc) = &mut self.point_to_doc {
+            point_to_doc[idx as usize] = None;
+        }
+
         true
     }
 

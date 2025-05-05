@@ -46,11 +46,14 @@ impl InvertedIndex for ImmutableInvertedIndex {
         ))
     }
 
-    fn remove_document(&mut self, idx: PointOffsetType) -> bool {
+    fn remove(&mut self, idx: PointOffsetType) -> bool {
         if self.values_is_empty(idx) {
             return false; // Already removed or never actually existed
         }
         self.point_to_tokens_count[idx as usize] = None;
+        if let Some(point_to_doc) = &mut self.point_to_doc {
+            point_to_doc[idx as usize] = None;
+        }
         self.points_count -= 1;
         true
     }

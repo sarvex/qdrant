@@ -51,7 +51,7 @@ impl MmapFullTextIndex {
     }
 
     pub fn remove_point(&mut self, id: PointOffsetType) -> OperationResult<()> {
-        self.inverted_index.remove_document(id);
+        self.inverted_index.remove(id);
 
         Ok(())
     }
@@ -139,7 +139,7 @@ impl ValueIndexer for FullTextMmapIndexBuilder {
     }
 
     fn remove_point(&mut self, id: PointOffsetType) -> OperationResult<()> {
-        self.mutable_index.remove_document(id);
+        self.mutable_index.remove(id);
 
         Ok(())
     }

@@ -226,7 +226,7 @@ impl InvertedIndex for MmapInvertedIndex {
         ))
     }
 
-    fn remove_document(&mut self, idx: PointOffsetType) -> bool {
+    fn remove(&mut self, idx: PointOffsetType) -> bool {
         let Some(is_deleted) = self.deleted_points.get(idx as usize) else {
             return false; // Never existed
         };
@@ -242,6 +242,9 @@ impl InvertedIndex for MmapInvertedIndex {
             // `deleted_points`'s length can be larger than `point_to_tokens_count`'s length.
             // Only if the index is within bounds of `point_to_tokens_count`, we decrement the active points count.
             self.active_points_count -= 1;
+        }
+        if let Some(_point_to_doc) = &mut self.point_to_doc {
+            // Cannot modify a MmapHashMap
         }
         true
     }
