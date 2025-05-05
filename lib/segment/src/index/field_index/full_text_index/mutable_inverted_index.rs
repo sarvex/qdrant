@@ -25,6 +25,7 @@ pub struct MutableInvertedIndex {
 impl MutableInvertedIndex {
     pub fn build_index(
         iter: impl Iterator<Item = OperationResult<(PointOffsetType, BTreeSet<String>)>>,
+        // TODO: add param for including phrase field.
     ) -> OperationResult<Self> {
         let mut index = Self::default();
 
