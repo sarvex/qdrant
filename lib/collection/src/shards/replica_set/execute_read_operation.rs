@@ -122,6 +122,8 @@ impl ShardReplicaSet {
             )));
         };
 
+        self.check_partial_snapshot_read_lock()?;
+
         read_operation(local.get()).await
     }
 
