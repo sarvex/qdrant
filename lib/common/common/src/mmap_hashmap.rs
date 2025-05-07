@@ -415,28 +415,6 @@ impl Key for str {
     }
 }
 
-impl Key for u32 {
-    const ALIGN: usize = align_of::<u32>();
-
-    const NAME: [u8; 8] = *b"u32\0\0\0\0\0";
-
-    fn write_bytes(&self) -> usize {
-        size_of::<u32>()
-    }
-
-    fn write(&self, buf: &mut impl Write) -> io::Result<()> {
-        buf.write_all(self.as_bytes())
-    }
-
-    fn matches(&self, buf: &[u8]) -> bool {
-        buf.get(..size_of::<u32>()) == Some(self.as_bytes())
-    }
-
-    fn from_bytes(buf: &[u8]) -> Option<&Self> {
-        Some(u32::ref_from_prefix(buf).ok()?.0)
-    }
-}
-
 impl Key for i64 {
     const ALIGN: usize = align_of::<i64>();
 
